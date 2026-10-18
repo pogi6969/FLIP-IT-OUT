@@ -146,9 +146,12 @@
   function drawMark(c, x, top, size) {
     var k = size / 512, white = c.col([1, 1, 1]);
     c.round(x, top, size, size, 112 * k, BRAND);
+    var L = root.PDFLib;
+    c.page.pushOperators(L.pushGraphicsState(), L.setLineJoin(L.LineJoinStyle.Round));
     ["M142 232A114 114 0 0 1 362 214", "M318 202L364 236L392 186", "M370 280A114 114 0 0 1 150 298", "M194 310L148 276L120 326"].forEach(function (d) {
       c.page.drawSvgPath(d, { x: x, y: PAGE_H - top, scale: k, borderColor: white, borderWidth: 40, borderLineCap: 1 });
     });
+    c.page.pushOperators(L.popGraphicsState());
   }
 
   function header(c, info, index, total, section) {
