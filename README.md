@@ -45,3 +45,27 @@ cd tests
 npm install
 npm test
 ```
+
+## Selling Pro
+
+The free copy on GitHub Pages has every feature. The paid site runs the same files with plans turned on:
+
+- **Free:** a few scans a day (3 by default), one file at a time, scores and top sources on screen.
+- **Pro:** unlimited scans, whole-class batches, and the full reports to view and download.
+
+GitHub Pages does not allow sites built mainly for selling, so the paid site goes on Cloudflare Pages (free plan, selling allowed).
+
+1. **Lemon Squeezy** (handles checkout, tax and payouts): create a store and a product with **license keys** turned on. Note the store ID, the product ID and the product's checkout link.
+2. **Cloudflare Pages:** Create project → Connect to Git → this repository, branch `main`.
+   - Build command: `node tools/configure.mjs`
+   - Build output directory: `/`
+   - Environment variables:
+     - `PAID` = `1`
+     - `CHECKOUT_URL` = the Lemon Squeezy checkout link
+     - `PRICE_LABEL` = for example `₱149 a month`
+     - `FREE_SCANS` = free scans per day (default 3)
+     - `OWNER_KEY` = a long secret only you know: enter it under Settings → Plan to unlock Pro for good
+     - `LS_STORE_ID`, `LS_PRODUCT_ID` = your Lemon Squeezy store and product IDs
+3. Deploy. `functions/api/verify.js` becomes `/api/verify`, which checks license keys with Lemon Squeezy and accepts your owner key. Keys are checked again every week, so refunded or expired keys stop working.
+
+Reading and scanning happen in the browser, so a determined person could edit the page to skip the limits. The plan keeps honest users on the right tier; it is not copy protection.

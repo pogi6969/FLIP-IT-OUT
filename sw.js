@@ -1,7 +1,7 @@
 /* Flip It Out service worker: keeps the website, the app, the engines, the fonts and the icons so the
    app opens and builds reports without a connection. Pages come from the network when online.
    Bump VERSION after changing any file. */
-var VERSION = "fio-v2";
+var VERSION = "fio-v3";
 var PRECACHE = [
   "./",
   "app/",
@@ -10,6 +10,8 @@ var PRECACHE = [
   "assets/css/site.css",
   "assets/js/ai.js",
   "assets/js/boot.js",
+  "assets/js/config.js",
+  "assets/js/license.js",
   "assets/js/extract.js",
   "assets/js/report.js",
   "assets/js/similarity.js",
@@ -93,5 +95,12 @@ self.addEventListener("fetch", function (event) {
   var req = event.request;
   if (req.method !== "GET") return;
   if (req.mode === "navigate") { event.respondWith(page(event)); return; }
-  if (new URL(req.url).origin === self.location.origin) event.respondWith(asset(event));
+  var url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  /* The plan settings change with each deploy, so they come from the network when online. */
+  if (/\/assets\/js\/config\.js$/.test(url.pathname)) {
+    event.respondWith(fetch(req, { cache: "no-cache" }).catch(function () { return caches.match(req); }));
+    return;
+  }
+  event.respondWith(asset(event));
 });

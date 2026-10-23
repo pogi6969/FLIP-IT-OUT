@@ -134,6 +134,9 @@
       el("div", { class: "fio-progress-label" }), el("div", { class: "fio-bar" }, [el("span")]), el("ol", { class: "fio-steps" })
     ]);
     var errorBox = el("div", { class: "fio-error", role: "alert", hidden: true });
+    var lic = VT.license;
+    var planLine = el("p", { class: "fio-plan", hidden: !lic.paid });
+    var upgradeBox = el("div", { class: "fio-upgrade", role: "status", hidden: true });
     var results = el("div", { class: "fio-results" });
 
     panels.scan.appendChild(el("div", { class: "fio-card" }, [
@@ -143,8 +146,40 @@
         field("Author", author), field("Institution", institution), field("Submission title", titleInput)
       ]),
       el("p", { class: "fio-note", text: "Phrases from the document are sent as search queries to the databases turned on in Settings. The whole document never leaves this device." }),
-      startBtn, errorBox
+      planLine, startBtn, errorBox, upgradeBox
     ]));
+    renderPlan();
+    lic.refresh().then(renderPlan);
+
+    /* Plan line under the form, and the upgrade prompt shown when a Pro feature is used on the free plan. */
+    function renderPlan() {
+      if (!lic.paid) return;
+      planLine.textContent = "";
+      if (lic.isPro()) {
+        planLine.appendChild(el("span", { text: lic.isOwner() ? "Owner plan: everything unlocked." : "Pro plan: unlimited scans and full reports." }));
+        return;
+      }
+      planLine.appendChild(el("span", { text: "Free plan: " + lic.scansLeft() + " of " + lic.freeScans + " scans left today, one file at a time. " }));
+      planLine.appendChild(buyLink("Get Pro" + (lic.priceLabel ? " (" + lic.priceLabel + ")" : "")));
+    }
+    function buyLink(text) {
+      return lic.checkoutUrl ? el("a", { href: lic.checkoutUrl, target: "_blank", rel: "noopener", text: text }) : el("span", { text: "Pro is coming soon." });
+    }
+    function upgrade(msg) {
+      upgradeBox.hidden = false;
+      upgradeBox.textContent = "";
+      upgradeBox.appendChild(el("strong", { text: msg }));
+      upgradeBox.appendChild(el("p", { text: "Pro unlocks unlimited scans, checking a whole class at once, and the full Similarity and AI Writing reports to view and download." }));
+      upgradeBox.appendChild(el("div", { class: "fio-actions" }, [
+        lic.checkoutUrl ? el("a", { class: "fio-btn fio-primary", href: lic.checkoutUrl, target: "_blank", rel: "noopener", text: "Get Pro" + (lic.priceLabel ? " \u00b7 " + lic.priceLabel : "") }) : null,
+        el("button", { class: "fio-btn", type: "button", text: "I have a license key", onclick: function () { show("settings"); } })
+      ]));
+      upgradeBox.scrollIntoView({ block: "nearest" });
+    }
+    /* Runs fn on the Pro plan; on the free plan shows the upgrade prompt instead. */
+    function pro(fn, msg) {
+      return function () { if (lic.isPro()) return fn.apply(this, arguments); upgrade(msg); };
+    }
     panels.scan.appendChild(progress);
     panels.scan.appendChild(results);
 
@@ -185,6 +220,11 @@
       var items = queue.slice();
       if (pasteBox.value.trim()) items.push({ name: (titleInput.value.trim() || "Pasted text") + ".txt", text: pasteBox.value, size: new Blob([pasteBox.value]).size });
       if (!items.length) { showError("Add a file or paste some text first."); return; }
+      upgradeBox.hidden = true;
+      if (!lic.isPro()) {
+        if (items.length > 1) { upgrade("Checking several files at once is part of Pro."); return; }
+        if (lic.scansLeft() < 1) { upgrade("You have used today's " + lic.freeScans + " free scans."); return; }
+      }
       settings.author = author.value.trim();
       settings.institution = institution.value.trim();
       saveSettings(settings);
@@ -201,6 +241,8 @@
         var repo = settings.repository ? await VT.sources.repoAll() : [];
         for (var j = 0; j < read.length; j++) {
           await scanOne(read[j], read, repo, reportFonts, j, read.length);
+          lic.countScan();
+          renderPlan();
         }
         queue = [];
         renderQueue();
@@ -285,10 +327,10 @@
         scoreTile("Detected as AI", aiLabel, ai ? (ai.enough ? ai.segments.length + " AI-generated segments" : "Fewer than 300 qualifying words") : "", "ai")
       ]);
       var actions = el("div", { class: "fio-actions" }, [
-        el("button", { class: "fio-btn fio-primary", type: "button", text: "Similarity report (PDF)", onclick: function () { download(rec.simPdf, fileBase(rec.fileName) + " - Similarity Report.pdf"); } }),
-        el("button", { class: "fio-btn fio-primary", type: "button", text: "AI writing report (PDF)", onclick: function () { download(rec.aiPdf, fileBase(rec.fileName) + " - AI Writing Report.pdf"); } }),
-        el("button", { class: "fio-btn", type: "button", text: "View similarity report", onclick: function () { openViewer(viewer, rec.simPdf, this); } }),
-        el("button", { class: "fio-btn", type: "button", text: "View AI writing report", onclick: function () { openViewer(viewer, rec.aiPdf, this); } })
+        el("button", { class: "fio-btn fio-primary", type: "button", text: "Similarity report (PDF)", onclick: pro(function () { download(rec.simPdf, fileBase(rec.fileName) + " - Similarity Report.pdf"); }, "Downloading the reports is part of Pro.") }),
+        el("button", { class: "fio-btn fio-primary", type: "button", text: "AI writing report (PDF)", onclick: pro(function () { download(rec.aiPdf, fileBase(rec.fileName) + " - AI Writing Report.pdf"); }, "Downloading the reports is part of Pro.") }),
+        el("button", { class: "fio-btn", type: "button", text: "View similarity report", onclick: pro(function () { openViewer(viewer, rec.simPdf, this); }, "Viewing the full reports is part of Pro.") }),
+        el("button", { class: "fio-btn", type: "button", text: "View AI writing report", onclick: pro(function () { openViewer(viewer, rec.aiPdf, this); }, "Viewing the full reports is part of Pro.") })
       ]);
       var kids = [head, tiles, actions];
       if (sim && sim.sources.length) {
@@ -354,8 +396,8 @@
           el("span", { class: "fio-chip sim", text: (r.similarity == null ? "--" : r.similarity + "%") + " similar" }),
           el("span", { class: "fio-chip ai", text: (r.ai == null ? "--" : r.ai + "%") + " AI" }),
           el("div", { class: "fio-hist-actions" }, [
-            r.simPdf ? el("button", { class: "fio-link", type: "button", text: "Similarity PDF", onclick: function () { download(r.simPdf, fileBase(r.fileName) + " - Similarity Report.pdf"); } }) : null,
-            r.aiPdf ? el("button", { class: "fio-link", type: "button", text: "AI PDF", onclick: function () { download(r.aiPdf, fileBase(r.fileName) + " - AI Writing Report.pdf"); } }) : null,
+            r.simPdf ? el("button", { class: "fio-link", type: "button", text: "Similarity PDF", onclick: pro(function () { download(r.simPdf, fileBase(r.fileName) + " - Similarity Report.pdf"); }, "Downloading the reports is part of Pro.") }) : null,
+            r.aiPdf ? el("button", { class: "fio-link", type: "button", text: "AI PDF", onclick: pro(function () { download(r.aiPdf, fileBase(r.fileName) + " - AI Writing Report.pdf"); }, "Downloading the reports is part of Pro.") }) : null,
             el("button", { class: "fio-link danger", type: "button", text: "Delete", onclick: async function () { await VT.sources.repoDelete(r.id); renderHistory(); } })
           ])
         ]));
@@ -372,6 +414,32 @@
     function textSetting(key, label, type, hint) {
       var input = el("input", { class: "fio-input", type: type || "text", value: settings[key] == null ? "" : settings[key], onchange: function () { settings[key] = type === "number" ? Math.max(0, +input.value || 0) : input.value.trim(); saveSettings(settings); } });
       return el("label", { class: "fio-field" }, [el("span", { text: label }), input, hint ? el("small", { class: "fio-muted", text: hint }) : null]);
+    }
+    if (lic.paid) panels.settings.appendChild(planCard());
+    function planCard() {
+      var card = el("div", { class: "fio-card fio-settings" });
+      function draw(msg) {
+        card.textContent = "";
+        card.appendChild(el("h3", { text: "Plan" }));
+        var st = lic.state();
+        if (st) {
+          card.appendChild(el("p", { text: (st.owner ? "Owner plan" : "Pro plan") + ", checked until " + new Date(st.expires).toLocaleDateString() + ". It is checked again automatically." }));
+          card.appendChild(el("button", { class: "fio-link danger", type: "button", text: "Remove the license from this device", onclick: function () { lic.signOut(); draw(); renderPlan(); } }));
+        } else {
+          var keyInput = el("input", { class: "fio-input", type: "text", autocomplete: "off", spellcheck: "false", placeholder: "License key" });
+          var go = el("button", { class: "fio-btn fio-primary", type: "button", text: "Activate", onclick: async function () {
+            go.disabled = true;
+            try { await lic.activate(keyInput.value.trim()); draw("Activated."); renderPlan(); upgradeBox.hidden = true; }
+            catch (e) { draw(e.message); }
+          } });
+          card.appendChild(el("p", { text: "Free plan: " + lic.freeScans + " scans a day, one file at a time. Pro: unlimited scans, whole-class batches, and the full reports." }));
+          card.appendChild(el("label", { class: "fio-field" }, [el("span", { text: "License key" }), keyInput]));
+          card.appendChild(el("div", { class: "fio-actions" }, [go, buyLink("Get Pro" + (lic.priceLabel ? " (" + lic.priceLabel + ")" : ""))]));
+        }
+        if (msg) card.appendChild(el("p", { class: "fio-note", role: "status", text: msg }));
+      }
+      draw();
+      return card;
     }
     panels.settings.appendChild(el("div", { class: "fio-card fio-settings" }, [
       el("h3", { text: "Filters" }),

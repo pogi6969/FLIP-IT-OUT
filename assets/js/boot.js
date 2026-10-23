@@ -5,6 +5,13 @@
   var deferred = null;
 
   VT.boot = function (opts) {
+    var cfg = root.FIO_CONFIG || {};
+    if (cfg.paid) {
+      document.querySelectorAll("#pricing, .paid-only").forEach(function (n) { n.hidden = false; });
+      document.querySelectorAll("[data-free]").forEach(function (n) { n.textContent = cfg.freeScans; });
+      document.querySelectorAll("[data-price]").forEach(function (n) { if (cfg.priceLabel) n.textContent = cfg.priceLabel; });
+      document.querySelectorAll("[data-checkout]").forEach(function (n) { if (cfg.checkoutUrl) { n.href = cfg.checkoutUrl; n.target = "_blank"; n.rel = "noopener"; } });
+    }
     var mount = document.getElementById(opts.mount);
     if (mount) VT.ui.mount(mount, { base: opts.base });
 
