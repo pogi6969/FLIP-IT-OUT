@@ -1,7 +1,7 @@
 /* Flip It Out service worker: keeps the website, the app, the engines, the fonts and the icons so the
    app opens and builds reports without a connection. Pages come from the network when online.
    Bump VERSION after changing any file. */
-var VERSION = "fio-v3";
+var VERSION = "fio-v4";
 var PRECACHE = [
   "./",
   "app/",
@@ -11,6 +11,7 @@ var PRECACHE = [
   "assets/js/ai.js",
   "assets/js/boot.js",
   "assets/js/config.js",
+  "assets/js/demo.js",
   "assets/js/license.js",
   "assets/js/extract.js",
   "assets/js/report.js",

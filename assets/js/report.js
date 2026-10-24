@@ -415,8 +415,16 @@
     });
   }
 
-  function finish(b, pages, info, sections) {
-    pages.forEach(function (c, i) { header(c, info, i + 1, pages.length, sections[i]); });
+  function finish(b, pages, info, sections, watermark) {
+    pages.forEach(function (c, i) {
+      header(c, info, i + 1, pages.length, sections[i]);
+      if (watermark) {
+        var size = 46, w = c.width(watermark, "lexSemi", size), a = Math.PI / 4;
+        c.page.drawText(watermark, { x: PAGE_W / 2 - Math.cos(a) * w / 2, y: PAGE_H / 2 - Math.sin(a) * w / 2, size: size, font: b.fonts.lexSemi,
+          color: b.L.rgb(0.86, 0.12, 0.16), opacity: 0.22, rotate: b.L.degrees(45) });
+        c.text(watermark, 36, 44, "notoSemi", 7, [0.86, 0.12, 0.16]);
+      }
+    });
     b.pdf.setTitle(info.fileName || "Submission");
     b.pdf.setAuthor(info.author || "");
     b.pdf.setCreator("Flip It Out");
@@ -439,7 +447,7 @@
     });
     var subs = await submissionPages(b, doc, { pdfBytes: opts.pdfBytes, rasterize: opts.rasterize, highlights: highlights, markers: markers });
     subs.forEach(function (c) { pages.push(c); sections.push("Integrity Submission"); });
-    return finish(b, pages, info, sections);
+    return finish(b, pages, info, sections, opts.watermark);
   };
 
   /* Public: AI writing report ------------------------------------------------------------------- */
@@ -487,6 +495,6 @@
     var highlights = ai.enough && !ai.hidden ? ai.segments.map(function (s) { return { start: s.start, end: s.end, color: AI_CYAN }; }) : [];
     var subs = await submissionPages(b, doc, { pdfBytes: opts.pdfBytes, rasterize: opts.rasterize, highlights: highlights, markers: [] });
     subs.forEach(function (x) { pages.push(x); sections.push("AI Writing Submission"); });
-    return finish(b, pages, info, sections);
+    return finish(b, pages, info, sections, opts.watermark);
   };
 })(typeof self !== "undefined" ? self : globalThis);

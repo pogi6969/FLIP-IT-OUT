@@ -102,7 +102,9 @@
     rootEl.classList.add("fio");
     var tabs = el("div", { class: "fio-tabs", role: "tablist" });
     var panels = {};
-    [["scan", "New scan"], ["history", "Submissions"], ["settings", "Settings"]].forEach(function (t, i) {
+    var tabList = [["scan", "New scan"], ["history", "Submissions"], ["settings", "Settings"]];
+    if (!VT.license.paid || VT.license.isOwner()) tabList.push(["admin", "Admin"]);
+    tabList.forEach(function (t, i) {
       var b = el("button", { class: "fio-tab", role: "tab", type: "button", "aria-selected": i === 0 ? "true" : "false", "data-tab": t[0], text: t[1], onclick: function () { show(t[0]); } });
       tabs.appendChild(b);
       panels[t[0]] = el("section", { class: "fio-panel", role: "tabpanel", hidden: i !== 0 });
@@ -271,9 +273,9 @@
       setStep(2, "Searching the internet and publications" + label, 0.15);
       var found = await VT.sources.collect(doc, settings, extra, function (l, f) { setStep(2, l + label, 0.15 + 0.5 * f); });
       setStep(3, "Comparing with submitted works" + label, 0.7);
-      var sim = VT.sim.compare(doc, found.sources, { excludeBib: settings.excludeBib, excludeQuotes: settings.excludeQuotes, minWords: +settings.minWords || 0 });
+      var sim = VT.sim.compare(doc, found.sources, { excludeBib: settings.excludeBib, excludeQuotes: settings.excludeQuotes, minWords: +settings.minWords || 0, gram: +settings.gram || 5 });
       setStep(4, "Detecting AI writing" + label, 0.78);
-      var ai = VT.ai.detect(doc);
+      var ai = VT.ai.detect(doc, { threshold: +settings.aiThreshold || 0 });
       setStep(5, "Building the reports" + label, 0.85);
       var counts = VT.report.counts(doc);
       var info = {
@@ -461,6 +463,58 @@
       check("repository", "Compare with earlier submissions", "Every document scanned in this browser."),
       check("saveToRepo", "Save new submissions to the repository", "Later scans are then compared with them.")
     ]));
+
+    /* Admin (owner only on the paid site) ----------------------------------------------------------- */
+    if (panels.admin) {
+      var def = VT.ai.MODEL.threshold;
+      var thr = el("input", { type: "range", min: "0.30", max: "0.70", step: "0.01", value: String(settings.aiThreshold || def) });
+      var thrOut = el("strong", { text: (+thr.value).toFixed(2) });
+      thr.addEventListener("input", function () { thrOut.textContent = (+thr.value).toFixed(2); settings.aiThreshold = +thr.value; saveSettings(settings); });
+      var gram = el("select", { class: "fio-input", onchange: function () { settings.gram = +gram.value; saveSettings(settings); } });
+      [4, 5, 6, 7, 8].forEach(function (n) { gram.appendChild(el("option", { value: n, text: n + " words" + (n === 5 ? " (default)" : ""), selected: (settings.gram || 5) === n })); });
+      panels.admin.appendChild(el("div", { class: "fio-card fio-settings" }, [
+        el("h3", { text: "Detection settings" }),
+        el("p", { class: "fio-muted", text: "These change how the next scans are run. Earlier reports keep the settings they were made with." }),
+        el("label", { class: "fio-field" }, [el("span", {}, ["AI writing threshold: ", thrOut]), thr,
+          el("small", { class: "fio-muted", text: "Lower flags more sentences as AI, higher flags fewer. Default " + def.toFixed(2) + "." })]),
+        el("label", { class: "fio-field" }, [el("span", { text: "Similarity fingerprint length" }), gram,
+          el("small", { class: "fio-muted", text: "Shorter fingerprints find shorter matches, longer ones only find longer copied passages." })]),
+        el("button", { class: "fio-link", type: "button", text: "Back to the defaults", onclick: function () {
+          delete settings.aiThreshold; delete settings.gram; saveSettings(settings);
+          thr.value = String(def); thrOut.textContent = def.toFixed(2); gram.value = "5";
+        } })
+      ]));
+      var dSim = el("input", { class: "fio-input", type: "number", min: "0", max: "100", value: "12" });
+      var dAi = el("input", { class: "fio-input", type: "number", min: "0", max: "100", value: "35" });
+      var dBtn = el("button", { class: "fio-btn fio-primary", type: "button", text: "Build sample reports", onclick: async function () {
+        dBtn.disabled = true;
+        try {
+          var doc = VT.extract.fromText(VT.demo.TEXT, await measureFonts(base));
+          VT.text.analyze(doc);
+          var r = VT.demo.results(doc, Math.min(100, Math.max(0, +dSim.value || 0)), Math.min(100, Math.max(0, +dAi.value || 0)));
+          var counts = VT.report.counts(doc), now = new Date();
+          var info = { author: "Sample Student", institution: settings.institution, title: "Sample essay", fileName: "Sample essay.txt", fileSize: VT.demo.TEXT.length,
+            submissionId: VT.report.newSubmissionId(), submittedAt: now, downloadedAt: now, pages: doc.pageCount, words: counts.words, chars: counts.chars };
+          var f = await fonts(base), wm = { watermark: VT.demo.WATERMARK };
+          var simPdf = await VT.report.similarity(doc, r.sim, info, f, wm);
+          var aiPdf = await VT.report.ai(doc, r.ai, info, f, wm);
+          var rec = { id: info.submissionId, title: "Sample essay (demo, not a real scan)", author: info.author, fileName: "Sample essay.txt", date: now.getTime(),
+            similarity: Math.round(r.sim.overall), ai: r.ai.percent, tokens: "", simPdf: new Blob([simPdf], { type: "application/pdf" }), aiPdf: new Blob([aiPdf], { type: "application/pdf" }) };
+          results.prepend(resultCard(rec, r.sim, r.ai, null));
+          show("scan");
+        } catch (e) { showError(e.message || String(e)); show("scan"); }
+        finally { dBtn.disabled = false; }
+      } });
+      panels.admin.appendChild(el("div", { class: "fio-card fio-settings" }, [
+        el("h3", { text: "Demo reports" }),
+        el("p", { class: "fio-muted", text: "Sample reports for screenshots and marketing. They use a built-in sample essay, show the scores you choose, and carry \u201c" + VT.demo.WATERMARK + "\u201d on every page. They are not saved to the repository." }),
+        el("div", { class: "fio-grid" }, [
+          el("label", { class: "fio-field" }, [el("span", { text: "Overall Similarity (%)" }), dSim]),
+          el("label", { class: "fio-field" }, [el("span", { text: "Detected as AI (%)" }), dAi])
+        ]),
+        dBtn
+      ]));
+    }
 
     return { show: show };
   };

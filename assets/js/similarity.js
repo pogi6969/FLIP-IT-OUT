@@ -10,6 +10,12 @@
   var S = VT.sim = {};
   var N = 5;
 
+  function gramHash(toks, i) {
+    var s = toks[i];
+    for (var k = 1; k < N; k++) s += " " + toks[i + k];
+    return VT.text.hash(s);
+  }
+
   S.TYPES = { internet: "Internet", publication: "Publication", submitted: "Submitted works" };
 
   S.GROUPS = [
@@ -19,13 +25,10 @@
     { key: "cq", label: "Cited and Quoted", desc: "Matches with in-text citation present, but no quotation marks" }
   ];
 
-  function gramHash(toks, i) {
-    return VT.text.hash(toks[i] + " " + toks[i + 1] + " " + toks[i + 2] + " " + toks[i + 3] + " " + toks[i + 4]);
-  }
-
-  /* opts: {excludeBib, excludeQuotes, minWords}. sources: [{id, type, title, url, texts: [string], tokens?: [string]}]. */
+  /* opts: {excludeBib, excludeQuotes, minWords, gram}. gram is the fingerprint length in words (4 to 8). sources: [{id, type, title, url, texts: [string], tokens?: [string]}]. */
   S.compare = function (doc, sources, opts) {
     opts = opts || {};
+    N = Math.min(8, Math.max(4, +opts.gram || 5));
     var words = doc.words;
     var tok = [], wordOf = [], excluded = [];
     words.forEach(function (w, i) {

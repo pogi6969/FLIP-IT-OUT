@@ -160,7 +160,9 @@
 
   /* Runs the detector. Returns the percentage, the number of AI-generated segments, the flagged word
      ranges and the qualifying word count. */
-  A.detect = function (doc) {
+  /* opts.threshold overrides the model's cut-off (lower flags more text). */
+  A.detect = function (doc, opts) {
+    var threshold = opts && opts.threshold > 0 && opts.threshold < 1 ? opts.threshold : A.MODEL.threshold;
     var qual = A.qualifying(doc);
     var fr = A.featureRows(doc, qual);
     var raw = fr.rows.map(score);
@@ -175,7 +177,7 @@
     fr.sentences.forEach(function (k, j) {
       var n = fr.stats[j].words;
       total += n;
-      if (smooth[j] >= A.MODEL.threshold) { flaggedWords += n; flagged.push(k); }
+      if (smooth[j] >= threshold) { flaggedWords += n; flagged.push(k); }
     });
     var segments = [], prev = -2;
     flagged.forEach(function (k) {
